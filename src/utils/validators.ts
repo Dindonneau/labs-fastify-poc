@@ -36,3 +36,7 @@ export const isValidHostname = (value: string) => {
       /^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(label)
   )
 }
+
+export function isValidMongoUrl(value: string): boolean {
+  return /^mongodb(\+srv)?:\/\/\S+$/.test(value)
+}

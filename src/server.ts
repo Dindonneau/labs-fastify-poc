@@ -16,5 +16,8 @@ function readConfig(): IConfig {
 const config = readConfig()
 const server = Fastify({ logger: true })
 
-await server.register(app, { serviceName: config.serviceName })
+await server.register(app, {
+  serviceName: config.serviceName,
+  mongoUrl: config.mongoUrl
+})
 await server.listen({ port: config.port, host: config.host })
