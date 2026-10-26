@@ -1,4 +1,4 @@
-# minilem
+# fastify-poc
 
 A small API for managing leads and exporting them, built around one idea: an export should be a job that lives in the database, not in the memory of a request. Stop the server halfway through and the export is meant to pick up where it left off, and every user is meant to see only their own data.
 
@@ -27,7 +27,7 @@ It listens on `127.0.0.1:8081`.
 
 ```bash
 curl 127.0.0.1:8081/health
-# {"status":"ok","service":"minilem"}
+# {"status":"ok","service":"fastify-poc"}
 ```
 
 To run what would actually ship:
@@ -58,7 +58,7 @@ So `app.ts` does not know who built it. The server will give it one configuratio
 
 Every route declares its contract: a TypeBox schema, and the type derived from it. The generic makes the compiler reject a handler that returns the wrong type, and the schema stops any field it does not declare from reaching the client. The two describe the same shape, and neither replaces the other: a generic is erased at runtime, a schema is compiled by Fastify at startup.
 
-The project is ESM. Relative imports carry their `.ts` extension, which `rewriteRelativeImportExtensions` rewrites to `.js` in the build. The reasoning is in the [lemfast README](https://github.com/Dindonneau/lemfast#departures-from-the-guides).
+The project is ESM. Relative imports carry their `.ts` extension, which `rewriteRelativeImportExtensions` rewrites to `.js` in the build. The reasoning is in the [fastify-training README](https://github.com/Dindonneau/labs-fastify-training#departures-from-the-guides).
 
 ## What comes next
 
@@ -76,4 +76,4 @@ In order, each step on its own:
 
 ## Related
 
-[lemfast](https://github.com/Dindonneau/lemfast) is where the Fastify concepts this project builds on were worked through: plugins and encapsulation, decorators, schemas, and the asynchronous bootstrapping of a database connection.
+[fastify-training](https://github.com/Dindonneau/labs-fastify-training) is where the Fastify concepts this project builds on were worked through: plugins and encapsulation, decorators, schemas, and the asynchronous bootstrapping of a database connection.

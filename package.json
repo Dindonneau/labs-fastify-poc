@@ -1,5 +1,5 @@
 {
-  "name": "minilem",
+  "name": "labs-fastify-poc",
   "version": "1.0.0",
   "description": "A small lead-export API on Fastify, built around a job that survives a restart",
   "scripts": {
