@@ -1,10 +1,10 @@
 {
-  "name": "minilem",
+  "name": "labs-fastify-poc",
   "version": "1.0.0",
   "description": "A small lead-export API on Fastify, built around a job that survives a restart",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "node --watch src/server.ts",
+    "dev": "node --env-file-if-exists=.env --watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js"
   },
