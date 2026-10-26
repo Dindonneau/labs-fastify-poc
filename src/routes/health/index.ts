@@ -9,10 +9,12 @@ const health: FastifyPluginAsync<HealthOptions> = async (fastify, options) => {
   fastify.get<{ Reply: HealthType }>(
     "/",
     { schema: { response: { 200: Health } } },
-    async () => ({
-      status: "ok",
-      service: options.serviceName,
-    }),
+    async (_req, res) => {
+      return res.send({
+        status: "ok",
+        service: options.serviceName
+      })
+    }
   )
 }
 
