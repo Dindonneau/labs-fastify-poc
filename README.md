@@ -6,7 +6,7 @@ It is a proof of concept, built step by step on Fastify so that each piece is un
 
 ## Status
 
-Early. A server that starts from a configuration read from its environment, one route (`GET /health`), the tests that cover both, and the structure everything else will hang on. There is no database, no authentication and no export yet.
+Early. A server that starts from a configuration read from its environment, connects to MongoDB, one route (`GET /health`) that reports whether the database answers, the tests that cover them, and the structure everything else will hang on. There is no data, no authentication and no export yet.
 
 ## Stack
 
@@ -14,12 +14,14 @@ Early. A server that starts from a configuration read from its environment, one 
 - TypeBox 1.4 — schemas written in TypeScript, types derived from them
 - TypeScript 7
 - Node 24 — `.nvmrc` pins `lts/krypton`
+- MongoDB — through `@fastify/mongodb`; a local server is needed to run it and to run the tests
 
 ## Running it
 
 ```bash
 nvm use
 npm install
+cp .env.example .env # MONGO_URL has no default
 npm run dev          # reloads on save, straight from the sources
 ```
 
@@ -27,18 +29,21 @@ By default it listens on `127.0.0.1:8081`.
 
 ```bash
 curl 127.0.0.1:8081/health
-# {"status":"ok","service":"fastify-poc"}
+# {"status":"ok","service":"fastify-poc","database":"up"}
 ```
 
-Every setting has a default, so nothing is required. To change one, copy `.env.example` to `.env` and edit it; `npm run dev` reloads when the file changes. Without a `.env`, it prints `.env not found. Continuing without it.` (twice, once per process under `--watch`), which is normal.
+Every setting has a default except `MONGO_URL`. To change one, edit your `.env` (copied from `.env.example`); `npm run dev` reloads when the file changes. Without a `.env`, it prints `.env not found. Continuing without it.` (twice, once per process under `--watch`). That is only harmless if `MONGO_URL` is set in the real environment; otherwise the server stops with `MONGO_URL is required`.
 
 To run what would actually ship:
 
 ```bash
-npm run build && npm start
+npm run build
+MONGO_URL=mongodb://127.0.0.1:27017/fastify-poc npm start
 ```
 
-`npm test` runs the tests, with no server running and no database needed. Only files named `*.test.ts` are run, so a helper placed in `test/` is not mistaken for a test.
+`npm start` reads no `.env`, so every setting it needs comes from the environment.
+
+`npm test` runs the tests. No server needs to be running, but a MongoDB must be reachable on `127.0.0.1:27017`: the tests use a database of their own, `fastify-poc-test`. Only files named `*.test.ts` are run, so a helper placed in `test/` is not mistaken for a test.
 
 `npm test` does not check types: Node only strips the annotations. `npm run typecheck` does, for the application and for the tests.
 
@@ -49,8 +54,10 @@ src/
   server.ts                reads the configuration, creates the instance and listens
   config.ts                turns the environment into typed, validated settings
   app.ts                   composes the application, and nothing else
+  plugins/
+    mongo.ts               opens the MongoDB connection, closes it on shutdown
   routes/
-    health/index.ts        GET /health
+    health/index.ts        GET /health, and the database's state
   schemas/
     health.ts              the response schema and the type derived from it
   utils/
@@ -70,6 +77,12 @@ test/
 
 So `app.ts` does not know who built it. The server gives it the settings it needs, and each test gives it its own.
 
+### The database
+
+`plugins/mongo.ts` is wrapped in `fastify-plugin`, so that `fastify.mongo` is visible to the routes registered after it and not only inside the plugin. `app.ts` registers it before them. The connection is opened before the server listens, so a database that cannot be reached stops the start-up (after 2 s rather than the plugin's default 7.5 s) rather than the first request. `@fastify/mongodb` closes it when the application closes.
+
+`GET /health` pings the database. When it answers, the response is `200` with `database: "up"`. When it does not, it is `503` with `status: "degraded"` and `database: "down"`: the process is alive, but it cannot do its job.
+
 ### Configuration
 
 `config.ts` reads the settings once, at startup. An environment only holds strings, or nothing at all when a variable is absent, so this is where each value gets its real type (`PORT` becomes a number) and where a bad one is refused. A start with `PORT=abc` stops with exit code 1 and a message that lists every problem at once, rather than a stack trace. A value that is well formed but cannot be used, such as an address that is not on this machine, still fails later, at `listen`.
@@ -79,6 +92,7 @@ So `app.ts` does not know who built it. The server gives it the settings it need
 | `HOST` | `127.0.0.1` | the address to listen on |
 | `PORT` | `8081` | an integer from 1 to 65535 |
 | `SERVICE_NAME` | `fastify-poc` | reported by `/health` |
+| `MONGO_URL` | none, required | starts with `mongodb://` or `mongodb+srv://` |
 
 `loadConfig` takes the environment as an argument instead of reading `process.env` itself, so a test hands it a made-up one and never touches the real environment.
 
@@ -92,7 +106,7 @@ The project is ESM. Relative imports carry their `.ts` extension, which `rewrite
 
 In order, each step on its own:
 
-1. MongoDB, and leads that belong to a user. The database URL becomes the first setting with no default, and the tests get a database of their own.
+1. Leads: a collection, a schema, creating and listing them.
 2. Identifying the caller, and filtering every query by owner.
 3. The export as a job document, with a status and a progress.
 4. A worker that runs it, started and stopped with the server.
