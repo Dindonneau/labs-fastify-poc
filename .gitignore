@@ -3,3 +3,6 @@ dist/
 
 # VSCode
 .vscode/
+
+# Local settings; .env.example is the version that is committed
+.env
