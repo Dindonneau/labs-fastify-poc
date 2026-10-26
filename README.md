@@ -6,7 +6,7 @@ It is a proof of concept, built step by step on Fastify so that each piece is un
 
 ## Status
 
-Early. A server that starts, one route (`GET /health`), and the structure everything else will hang on. There is no database, no authentication and no export yet.
+Early. A server that starts from a configuration read from its environment, one route (`GET /health`), and the structure everything else will hang on. There is no database, no authentication and no export yet.
 
 ## Stack
 
@@ -23,12 +23,14 @@ npm install
 npm run dev          # reloads on save, straight from the sources
 ```
 
-It listens on `127.0.0.1:8081`.
+By default it listens on `127.0.0.1:8081`.
 
 ```bash
 curl 127.0.0.1:8081/health
 # {"status":"ok","service":"fastify-poc"}
 ```
+
+Every setting has a default, so nothing is required. To change one, copy `.env.example` to `.env` and edit it; `npm run dev` reloads when the file changes. Without a `.env`, it prints `.env not found. Continuing without it.` (twice, once per process under `--watch`), which is normal.
 
 To run what would actually ship:
 
@@ -42,19 +44,39 @@ There are no tests yet; `npm test` is still the placeholder `npm init` wrote.
 
 ```
 src/
-  server.ts                creates the instance and listens
+  server.ts                reads the configuration, creates the instance and listens
+  config.ts                turns the environment into typed, validated settings
   app.ts                   composes the application, and nothing else
   routes/
     health/index.ts        GET /health
   schemas/
     health.ts              the response schema and the type derived from it
+  utils/
+    validators.ts          what a valid host and a valid port are
+    string.ts, array.ts    small helpers
+    error.ts               prints an error's message rather than its stack
+.env.example               the settings that exist, with their defaults
 ```
 
 ## How it is put together
 
 `server.ts` creates the Fastify instance and listens. `app.ts` only composes the application: its settings arrive as the options of `register()`, typed by `AppOptions`, and it hands them down to the routes it registers.
 
-So `app.ts` does not know who built it. The server will give it one configuration, and the tests, once they exist, another, with a database of their own. `serviceName` is scaffolding that makes the mechanism visible; real options replace it.
+So `app.ts` does not know who built it. The server gives it the settings it needs, and the tests, once they exist, will give it others, with a database of their own.
+
+### Configuration
+
+`config.ts` reads the settings once, at startup. An environment only holds strings, or nothing at all when a variable is absent, so this is where each value gets its real type (`PORT` becomes a number) and where a bad one is refused. A start with `PORT=abc` stops with exit code 1 and a message that lists every problem at once, rather than a stack trace. A value that is well formed but cannot be used, such as an address that is not on this machine, still fails later, at `listen`.
+
+| Variable | Default | |
+|---|---|---|
+| `HOST` | `127.0.0.1` | the address to listen on |
+| `PORT` | `8081` | an integer from 1 to 65535 |
+| `SERVICE_NAME` | `fastify-poc` | reported by `/health` |
+
+`loadConfig` takes the environment as an argument instead of reading `process.env` itself, so a test can hand it a made-up one without touching the real environment.
+
+`npm run dev` loads `.env` with Node's own `--env-file-if-exists`, with no package involved. A variable set in the real environment wins over the file. `.env` is not committed, and `.env.example` is. `npm start` does not read a file at all: a deployed process gets its settings from the environment it runs in.
 
 Every route declares its contract: a TypeBox schema, and the type derived from it. The generic makes the compiler reject a handler that returns the wrong type, and the schema stops any field it does not declare from reaching the client. The two describe the same shape, and neither replaces the other: a generic is erased at runtime, a schema is compiled by Fastify at startup.
 
@@ -64,15 +86,14 @@ The project is ESM. Relative imports carry their `.ts` extension, which `rewrite
 
 In order, each step on its own:
 
-1. Configuration read from the environment, so the same application can run against a development database or a test one.
-2. Tests that build the application without opening a port, using `fastify.inject`, against a database of their own.
-3. MongoDB, and leads that belong to a user.
-4. Identifying the caller, and filtering every query by owner.
-5. The export as a job document, with a status and a progress.
-6. A worker that runs it, started and stopped with the server.
-7. Resuming unfinished jobs at startup, checked by killing the process rather than stopping it politely.
-8. Progress the client can read.
-9. Error handling and a clean shutdown.
+1. Tests that build the application without opening a port, using `fastify.inject`.
+2. MongoDB, and leads that belong to a user. The database URL becomes the first setting with no default, and the tests get a database of their own.
+3. Identifying the caller, and filtering every query by owner.
+4. The export as a job document, with a status and a progress.
+5. A worker that runs it, started and stopped with the server.
+6. Resuming unfinished jobs at startup, checked by killing the process rather than stopping it politely.
+7. Progress the client can read.
+8. Error handling and a clean shutdown.
 
 ## Related
 
