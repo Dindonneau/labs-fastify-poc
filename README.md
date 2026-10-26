@@ -6,7 +6,7 @@ It is a proof of concept, built step by step on Fastify so that each piece is un
 
 ## Status
 
-Early. A server that starts from a configuration read from its environment, one route (`GET /health`), and the structure everything else will hang on. There is no database, no authentication and no export yet.
+Early. A server that starts from a configuration read from its environment, one route (`GET /health`), the tests that cover both, and the structure everything else will hang on. There is no database, no authentication and no export yet.
 
 ## Stack
 
@@ -38,7 +38,9 @@ To run what would actually ship:
 npm run build && npm start
 ```
 
-There are no tests yet; `npm test` is still the placeholder `npm init` wrote.
+`npm test` runs the tests, with no server running and no database needed. Only files named `*.test.ts` are run, so a helper placed in `test/` is not mistaken for a test.
+
+`npm test` does not check types: Node only strips the annotations. `npm run typecheck` does, for the application and for the tests.
 
 ## Layout
 
@@ -55,6 +57,10 @@ src/
     validators.ts          what a valid host and a valid port are
     string.ts, array.ts    small helpers
     error.ts               prints an error's message rather than its stack
+test/
+  config.test.ts           loadConfig, fed made-up environments
+  health.test.ts           GET /health, played through inject()
+  tsconfig.json            what `npm run typecheck`, and the editor, use to check the tests
 .env.example               the settings that exist, with their defaults
 ```
 
@@ -62,7 +68,7 @@ src/
 
 `server.ts` creates the Fastify instance and listens. `app.ts` only composes the application: its settings arrive as the options of `register()`, typed by `AppOptions`, and it hands them down to the routes it registers.
 
-So `app.ts` does not know who built it. The server gives it the settings it needs, and the tests, once they exist, will give it others, with a database of their own.
+So `app.ts` does not know who built it. The server gives it the settings it needs, and each test gives it its own.
 
 ### Configuration
 
@@ -74,7 +80,7 @@ So `app.ts` does not know who built it. The server gives it the settings it need
 | `PORT` | `8081` | an integer from 1 to 65535 |
 | `SERVICE_NAME` | `fastify-poc` | reported by `/health` |
 
-`loadConfig` takes the environment as an argument instead of reading `process.env` itself, so a test can hand it a made-up one without touching the real environment.
+`loadConfig` takes the environment as an argument instead of reading `process.env` itself, so a test hands it a made-up one and never touches the real environment.
 
 `npm run dev` loads `.env` with Node's own `--env-file-if-exists`, with no package involved. A variable set in the real environment wins over the file. `.env` is not committed, and `.env.example` is. `npm start` does not read a file at all: a deployed process gets its settings from the environment it runs in.
 
@@ -86,14 +92,13 @@ The project is ESM. Relative imports carry their `.ts` extension, which `rewrite
 
 In order, each step on its own:
 
-1. Tests that build the application without opening a port, using `fastify.inject`.
-2. MongoDB, and leads that belong to a user. The database URL becomes the first setting with no default, and the tests get a database of their own.
-3. Identifying the caller, and filtering every query by owner.
-4. The export as a job document, with a status and a progress.
-5. A worker that runs it, started and stopped with the server.
-6. Resuming unfinished jobs at startup, checked by killing the process rather than stopping it politely.
-7. Progress the client can read.
-8. Error handling and a clean shutdown.
+1. MongoDB, and leads that belong to a user. The database URL becomes the first setting with no default, and the tests get a database of their own.
+2. Identifying the caller, and filtering every query by owner.
+3. The export as a job document, with a status and a progress.
+4. A worker that runs it, started and stopped with the server.
+5. Resuming unfinished jobs at startup, checked by killing the process rather than stopping it politely.
+6. Progress the client can read.
+7. Error handling and a clean shutdown.
 
 ## Related
 
