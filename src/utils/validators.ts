@@ -37,6 +37,10 @@ export const isValidHostname = (value: string) => {
   )
 }
 
+// A database name is required: @fastify/mongodb only fills fastify.mongo.db
+// when the URL carries one, and the routes read their collections from it.
+// Anchored at both ends: without the $, "…/unicorn oops" would pass and the
+// driver would quietly create a database with a space in its name.
 export function isValidMongoUrl(value: string): boolean {
-  return /^mongodb(\+srv)?:\/\/\S+$/.test(value)
+  return /^mongodb(\+srv)?:\/\/[^\s/]+\/[^\s/?]+(\?\S*)?$/.test(value)
 }
