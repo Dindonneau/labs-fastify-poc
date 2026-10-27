@@ -35,7 +35,8 @@ Prettier, `printWidth` 80, in `.prettierrc`. It is a target rather than a limit:
 
 These are easy to break without noticing, and the structure exists for them:
 
-- a route never names a collection or an `_id`, and never holds a driver object — it goes through the repository interface. Reading `fastify.mongo.db` to build that repository is the one place a route touches the database;
+- a route never names a collection or an `_id`, and never holds a driver object — it goes through the repository interface. `requireDb(fastify.mongo.db)` is the one place a route touches the database;
+- `fastify.mongo.db` is typed `Db | undefined`, and that is information rather than noise to cast away. The version that needs no check, `client.db()`, answers a database silently **named `test`** when the URL names none, so every document lands in the wrong place without a word. Go through `requireDb`, and leave the repository's own parameter non-optional so the compiler refuses a call that skips it;
 - `ObjectId` stops at `swapMongoId`, in `src/utils/mongo.ts`. Nothing above the data layer holds a driver type;
 - the driver is reached through `@fastify/mongodb`, which re-exports it. `mongodb` is not a declared dependency, so importing it directly only works by accident;
 - every route declares a TypeBox schema and the type derived from it. The schema is not optional because the generic exists: one is erased at runtime, the other is compiled at startup.
