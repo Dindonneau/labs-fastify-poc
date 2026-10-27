@@ -8,13 +8,10 @@ import {
   type LeadsType,
   type NewLeadType
 } from "../../schemas/lead.ts"
+import { requireDb } from "../../utils/mongo.ts"
 
 const leads: FastifyPluginAsync = async fastify => {
-  // @fastify/mongodb only fills db when the URL names one, which config.ts
-  // now requires. Checked here so a mistake stops the start-up.
-  const { db } = fastify.mongo
-  if (!db) throw new Error("MONGO_URL must name a database")
-
+  const db = requireDb(fastify.mongo.db)
   const repository = mongoLeadsRepository(db)
 
   fastify.post<{ Body: NewLeadType; Reply: LeadType }>(

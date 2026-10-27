@@ -14,3 +14,11 @@ export const swapMongoId = <T extends Doc>(
   // id last: a document that already carries one must not win over the real _id
   return { ...restOfDocument, id: _id.toString() }
 }
+
+// @fastify/mongodb leaves db undefined when the URL names no database. The
+// message names MONGO_URL although this is a util, because it is read as a
+// boot failure: it should say what to fix, not which layer noticed.
+export const requireDb = (db: mongodb.Db | undefined): mongodb.Db => {
+  if (!db) throw new Error("MONGO_URL must name a database")
+  return db
+}
