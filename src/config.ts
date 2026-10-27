@@ -1,6 +1,10 @@
 import { listArrayContent } from "./utils/array.ts"
 import { isEmptyString } from "./utils/string.ts"
-import { isValidHost, isValidMongoUrl, isValidPort } from "./utils/validators.ts"
+import {
+  isValidHost,
+  isValidMongoUrl,
+  isValidPort
+} from "./utils/validators.ts"
 
 export interface IConfig {
   host: string
@@ -30,7 +34,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): IConfig {
     problems.push("MONGO_URL is required")
   } else if (!isValidMongoUrl(mongoUrl)) {
     // The value is not echoed: a URL usually carries a password
-    problems.push("MONGO_URL must be a mongodb:// or mongodb+srv:// URL naming a database")
+    problems.push(
+      "MONGO_URL must be a mongodb:// or mongodb+srv:// URL naming a database"
+    )
   }
 
   // Report every problem at once

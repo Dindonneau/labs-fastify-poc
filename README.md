@@ -53,7 +53,7 @@ MONGO_URL=mongodb://127.0.0.1:27017/fastify-poc npm start
 
 `npm test` runs the tests. No server needs to be running, but a MongoDB must be reachable on `127.0.0.1:27017`. Each test file that needs one gets a database of its own, named after it — `fastify-poc-test-health`, `fastify-poc-test-leads`, `fastify-poc-test-repository` — because test files run in parallel and a file that empties a collection would otherwise pull it out from under another. Only files named `*.test.ts` are run, so a helper placed in `test/` is not mistaken for a test.
 
-`npm test` does not check types: Node only strips the annotations. `npm run typecheck` does, for the application and for the tests.
+`npm test` does not check types: Node only strips the annotations. `npm run typecheck` does, for the application and for the tests. `npm run format` applies Prettier and `npm run format:check` only reports; the choices behind it are below.
 
 ## Layout
 
@@ -85,6 +85,7 @@ test/
   mongo.test.ts            swapMongoId, with no database involved
   tsconfig.json            what `npm run typecheck`, and the editor, use to check the tests
 .env.example               the settings that exist, with their defaults
+.prettierrc                the formatting every file here is written in
 ```
 
 ## How it is put together
@@ -128,12 +129,12 @@ A field the schema does not declare is a different matter: it is **dropped, not 
 
 `config.ts` reads the settings once, at startup. An environment only holds strings, or nothing at all when a variable is absent, so this is where each value gets its real type (`PORT` becomes a number) and where a bad one is refused. A start with `PORT=abc` stops with exit code 1 and a message that lists every problem at once, rather than a stack trace. A value that is well formed but cannot be used, such as an address that is not on this machine, still fails later, at `listen`.
 
-| Variable | Default | |
-|---|---|---|
-| `HOST` | `127.0.0.1` | the address to listen on |
-| `PORT` | `8081` | an integer from 1 to 65535 |
-| `SERVICE_NAME` | `fastify-poc` | reported by `/health` |
-| `MONGO_URL` | none, required | a `mongodb://` or `mongodb+srv://` URL that names a database |
+| Variable       | Default        |                                                              |
+| -------------- | -------------- | ------------------------------------------------------------ |
+| `HOST`         | `127.0.0.1`    | the address to listen on                                     |
+| `PORT`         | `8081`         | an integer from 1 to 65535                                   |
+| `SERVICE_NAME` | `fastify-poc`  | reported by `/health`                                        |
+| `MONGO_URL`    | none, required | a `mongodb://` or `mongodb+srv://` URL that names a database |
 
 `loadConfig` takes the environment as an argument instead of reading `process.env` itself, so a test hands it a made-up one and never touches the real environment.
 
@@ -142,6 +143,16 @@ A field the schema does not declare is a different matter: it is **dropped, not 
 Every route declares its contract: a TypeBox schema, and the type derived from it. The generic makes the compiler reject a handler that returns the wrong type, and the schema stops any field it does not declare from reaching the client. The two describe the same shape, and neither replaces the other: a generic is erased at runtime, a schema is compiled by Fastify at startup.
 
 The project is ESM. Relative imports carry their `.ts` extension, which `rewriteRelativeImportExtensions` rewrites to `.js` in the build. The reasoning is in the [fastify-training README](https://github.com/Dindonneau/labs-fastify-training#departures-from-the-guides).
+
+### Formatting
+
+Prettier owns it, through a `.prettierrc` so that an editor formats this repository the same way whatever its own settings say. `printWidth` is 80: Prettier's default, its documented recommendation, and where the TypeScript projects that use it land — NestJS, Next.js, tRPC and `create-t3-app` all sit at 80, and Angular's 100 is the exception rather than the rule.
+
+Fastify itself uses no Prettier at all. The core and its plugins run ESLint with `neostandard`, which has no line-length rule, and their code is short regardless: `@fastify/mongodb` never reaches 75 columns. So 80 is a choice made here, not something the framework asks for.
+
+It is a target and not a limit. Prettier describes `printWidth` as "roughly how long you'd like lines to be" and leaves a line long when it cannot break it — a string literal and a comment are never split, so a handful of test names run past 80 on purpose. Anyone expecting ESLint's `max-len` will read that as a violation; it is not one.
+
+Nothing runs by itself: there is no hook and no CI, so the formatter, the typechecker and the tests all have to be asked for.
 
 ## What comes next
 

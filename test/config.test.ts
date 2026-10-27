@@ -18,7 +18,12 @@ test("an empty environment gives the defaults", () => {
 })
 
 test("the values are read, and PORT becomes a number", () => {
-  const config = loadConfig({ ...base, HOST: "localhost", PORT: "3000", SERVICE_NAME: "unicorn" })
+  const config = loadConfig({
+    ...base,
+    HOST: "localhost",
+    PORT: "3000",
+    SERVICE_NAME: "unicorn"
+  })
 
   assert.deepEqual(config, {
     host: "localhost",
@@ -36,7 +41,17 @@ for (const port of ["1", "8081", "65535"]) {
 }
 
 // Plain digits only: a unary plus would let " 80 ", "1e3" and "0x1F90" through.
-for (const port of ["abc", "", "0", "65536", "-1", "80.5", " 80 ", "1e3", "0x1F90"]) {
+for (const port of [
+  "abc",
+  "",
+  "0",
+  "65536",
+  "-1",
+  "80.5",
+  " 80 ",
+  "1e3",
+  "0x1F90"
+]) {
   test(`PORT=${JSON.stringify(port)} is refused, and the message shows what was received`, () => {
     assert.throws(
       () => loadConfig({ ...base, PORT: port }),
@@ -48,7 +63,15 @@ for (const port of ["abc", "", "0", "65536", "-1", "80.5", " 80 ", "1e3", "0x1F9
   })
 }
 
-for (const host of ["localhost", "example.com", "example.com.", "127.0.0.1", "0.0.0.0", "::1", "::"]) {
+for (const host of [
+  "localhost",
+  "example.com",
+  "example.com.",
+  "127.0.0.1",
+  "0.0.0.0",
+  "::1",
+  "::"
+]) {
   test(`HOST=${JSON.stringify(host)} is accepted`, () => {
     assert.equal(loadConfig({ ...base, HOST: host }).host, host)
   })
@@ -56,7 +79,16 @@ for (const host of ["localhost", "example.com", "example.com.", "127.0.0.1", "0.
 
 // A last label made only of digits is not a name, which rules out an invalid
 // IPv4 address such as 256.1.1.1.
-for (const host of ["", " 127.0.0.1", "my host", "a_b", "-bad.com", "a..b", "256.1.1.1", "1.2.3"]) {
+for (const host of [
+  "",
+  " 127.0.0.1",
+  "my host",
+  "a_b",
+  "-bad.com",
+  "a..b",
+  "256.1.1.1",
+  "1.2.3"
+]) {
   test(`HOST=${JSON.stringify(host)} is refused, and the message shows what was received`, () => {
     assert.throws(
       () => loadConfig({ ...base, HOST: host }),
@@ -69,12 +101,21 @@ for (const host of ["", " 127.0.0.1", "my host", "a_b", "-bad.com", "a..b", "256
 }
 
 test("a blank SERVICE_NAME is refused", () => {
-  assert.throws(() => loadConfig({ ...base, SERVICE_NAME: "  " }), /SERVICE_NAME must not be empty/)
+  assert.throws(
+    () => loadConfig({ ...base, SERVICE_NAME: "  " }),
+    /SERVICE_NAME must not be empty/
+  )
 })
 
 test("every problem is reported at once, not only the first", () => {
   assert.throws(
-    () => loadConfig({ HOST: "", PORT: "abc", SERVICE_NAME: " ", MONGO_URL: "nope" }),
+    () =>
+      loadConfig({
+        HOST: "",
+        PORT: "abc",
+        SERVICE_NAME: " ",
+        MONGO_URL: "nope"
+      }),
     error =>
       error instanceof Error &&
       error.message.startsWith("Invalid configuration:") &&
@@ -115,14 +156,18 @@ for (const url of [
   "mongodb://127.0.0.1:27017/unicorn ?retryWrites=true"
 ]) {
   test(`MONGO_URL=${JSON.stringify(url)} is refused`, () => {
-    assert.throws(() => loadConfig({ MONGO_URL: url }), /MONGO_URL must be a mongodb/)
+    assert.throws(
+      () => loadConfig({ MONGO_URL: url }),
+      /MONGO_URL must be a mongodb/
+    )
   })
 }
 
 // A typo in the scheme must not leak the credentials into the logs.
 test("a refused MONGO_URL is not echoed back: it may hold a password", () => {
   assert.throws(
-    () => loadConfig({ MONGO_URL: "mongodb:/unicorn:secret@127.0.0.1/rainbow" }),
+    () =>
+      loadConfig({ MONGO_URL: "mongodb:/unicorn:secret@127.0.0.1/rainbow" }),
     error => error instanceof Error && !error.message.includes("secret")
   )
 })

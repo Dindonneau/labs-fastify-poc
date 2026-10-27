@@ -25,7 +25,11 @@ test("GET /health answers ok, with the service name it was given", async t => {
 
   assert.equal(response.statusCode, 200)
   assert.match(String(response.headers["content-type"]), /^application\/json/)
-  assert.deepEqual(response.json(), { status: "ok", service: "test-service", database: "up" })
+  assert.deepEqual(response.json(), {
+    status: "ok",
+    service: "test-service",
+    database: "up"
+  })
 })
 
 test("the service name comes from the options, not from a constant", async t => {
@@ -62,7 +66,10 @@ test("GET /health answers 503 and degraded once the database is unreachable", as
 test("the application refuses to start when the database cannot be reached", async () => {
   const server = Fastify()
 
-  server.register(app, { serviceName: "test-service", mongoUrl: "mongodb://127.0.0.1:1/unicorn" })
+  server.register(app, {
+    serviceName: "test-service",
+    mongoUrl: "mongodb://127.0.0.1:1/unicorn"
+  })
 
   await assert.rejects(
     async () => {
