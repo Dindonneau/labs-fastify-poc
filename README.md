@@ -74,7 +74,7 @@ src/
     lead.ts                what a client may send, and what is answered
   utils/
     validators.ts          what a valid host and a valid port are
-    mongo.ts               swaps Mongo's _id for the id the API answers
+    mongo.ts               swaps Mongo's _id for the API's id, and guards the database
     string.ts, array.ts    small helpers
     error.ts               prints an error's message rather than its stack
 test/
@@ -114,7 +114,9 @@ A repository for a single entity and two routes is more structure than they need
 
 The conversion is placed there rather than in a response hook on purpose. An `ObjectId` would serialize to its hexadecimal string by itself, since the driver gives it a `toJSON`, so a hook renaming `_id` for every route would work — but it would convert at the exit of the HTTP layer, leaving every service, log and future worker in between holding driver objects. Converting at the exit of the data layer means the rest of the application never learns which database is underneath. It is also the shape the Mongoose world reaches for with its `toJSON` transforms, except that an ODM owns the typing too.
 
-`routes/leads` still reads `fastify.mongo.db` to build the repository, and `@fastify/mongodb` only fills it when `MONGO_URL` names a database — hence the check in `config.ts`, and a second one at registration so a mistake stops the start-up rather than the first request.
+`routes/leads` builds its repository from `fastify.mongo.db`, through `requireDb` in `utils/mongo.ts`. `@fastify/mongodb` only fills `db` when `MONGO_URL` names a database, so its type is `Db | undefined`, and `requireDb` is what turns that into a failed start-up rather than a silent mistake: `client.db()`, the version that needs no check, answers a database named `test` instead. It also keeps the repository's own parameter non-optional, so the compiler refuses a call that skips the check.
+
+It is a second check because `config.ts` only covers one path: `config.ts` reads the environment, which is how `server.ts` starts, while `app.ts` is a plugin whose `mongoUrl` arrives in the options of `register()`. `loadConfig` never runs on that path, and every test takes it.
 
 A body that breaks the schema is answered with a `400` before the handler runs, so nothing reaches the database:
 

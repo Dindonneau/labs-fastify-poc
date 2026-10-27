@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { ObjectId } from "@fastify/mongodb"
-import { swapMongoId } from "../src/utils/mongo.ts"
+import { ObjectId, type mongodb } from "@fastify/mongodb"
+import { requireDb, swapMongoId } from "../src/utils/mongo.ts"
 
 // No database here: swapMongoId is a pure function, so a hand-made ObjectId
 // is enough to pin what it promises.
@@ -32,4 +32,17 @@ test("a stored id does not win over the real _id", () => {
   const document = swapMongoId({ _id, id: "pink" })
 
   assert.equal(document.id, _id.toHexString())
+})
+
+test("requireDb hands back the database it was given", () => {
+  // A stand-in: requireDb only cares that something is there
+  const db = {} as mongodb.Db
+
+  assert.equal(requireDb(db), db)
+})
+
+// The message is what someone reads when the boot fails, so it is part of
+// what this function promises: it has to say what to fix.
+test("requireDb refuses undefined, and names what to fix", () => {
+  assert.throws(() => requireDb(undefined), /MONGO_URL must name a database/)
 })
