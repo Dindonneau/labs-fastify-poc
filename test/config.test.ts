@@ -81,7 +81,7 @@ test("every problem is reported at once, not only the first", () => {
       error.message.includes("HOST is not valid") &&
       error.message.includes("PORT must be an integer") &&
       error.message.includes("SERVICE_NAME must not be empty") &&
-      error.message.includes("MONGO_URL must start with")
+      error.message.includes("MONGO_URL must be a mongodb")
   )
 })
 
@@ -89,15 +89,33 @@ test("a missing MONGO_URL is refused: it has no default", () => {
   assert.throws(() => loadConfig({}), /MONGO_URL is required/)
 })
 
-for (const url of ["mongodb://127.0.0.1:27017/unicorn", "mongodb+srv://rainbow.example.com/unicorn"]) {
+for (const url of [
+  "mongodb://127.0.0.1:27017/unicorn",
+  "mongodb+srv://rainbow.example.com/unicorn",
+  "mongodb://127.0.0.1:27017/unicorn?retryWrites=true"
+]) {
   test(`MONGO_URL=${JSON.stringify(url)} is accepted`, () => {
     assert.equal(loadConfig({ MONGO_URL: url }).mongoUrl, url)
   })
 }
 
-for (const url of ["", "localhost:27017", "http://127.0.0.1", "mongodb://", "mongodb:// x"]) {
+// Two kinds of refusal: a URL that names no database (the two reachable
+// servers in the middle), and one whose database name has trailing junk —
+// without the regex's end anchor, "unicorn oops" would become the name.
+for (const url of [
+  "",
+  "localhost:27017",
+  "http://127.0.0.1",
+  "mongodb://",
+  "mongodb:// x",
+  "mongodb://127.0.0.1:27017",
+  "mongodb://127.0.0.1:27017/",
+  "mongodb://127.0.0.1:27017/unicorn oops",
+  "mongodb://127.0.0.1:27017/unicorn\toops",
+  "mongodb://127.0.0.1:27017/unicorn ?retryWrites=true"
+]) {
   test(`MONGO_URL=${JSON.stringify(url)} is refused`, () => {
-    assert.throws(() => loadConfig({ MONGO_URL: url }), /MONGO_URL must start with mongodb:\/\//)
+    assert.throws(() => loadConfig({ MONGO_URL: url }), /MONGO_URL must be a mongodb/)
   })
 }
 

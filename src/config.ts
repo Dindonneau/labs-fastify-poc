@@ -30,7 +30,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): IConfig {
     problems.push("MONGO_URL is required")
   } else if (!isValidMongoUrl(mongoUrl)) {
     // The value is not echoed: a URL usually carries a password
-    problems.push("MONGO_URL must start with mongodb:// or mongodb+srv://")
+    problems.push("MONGO_URL must be a mongodb:// or mongodb+srv:// URL naming a database")
   }
 
   // Report every problem at once

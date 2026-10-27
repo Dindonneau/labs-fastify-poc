@@ -6,9 +6,10 @@ import app from "../src/app.ts"
 
 // Builds the application as the server does, but with the options a test
 // chooses. inject() then plays an HTTP request against it: no port is opened.
-// The tests use a database of their own, so they never touch real data. It
-// needs a MongoDB running locally; MongoDB creates it on first write.
-const mongoUrl = "mongodb://127.0.0.1:27017/fastify-poc-test"
+// One database per test file, so a file that empties a collection cannot
+// disturb another running beside it. A MongoDB must be running locally;
+// MongoDB creates the database on first write.
+const mongoUrl = "mongodb://127.0.0.1:27017/fastify-poc-test-health"
 
 async function build(serviceName: string) {
   const server = Fastify()
@@ -69,17 +70,6 @@ test("the application refuses to start when the database cannot be reached", asy
     },
     { name: "MongoServerSelectionError" }
   )
-})
-
-test("a database URL without a database name still reports the database as up", async t => {
-  const server = Fastify()
-  await server.register(app, { serviceName: "test-service", mongoUrl: "mongodb://127.0.0.1:27017" })
-  t.after(() => server.close())
-
-  const response = await server.inject({ method: "GET", url: "/health" })
-
-  assert.equal(response.statusCode, 200)
-  assert.equal(response.json().database, "up")
 })
 
 test("an unknown route is a 404: no catch-all route answers in its place", async t => {
