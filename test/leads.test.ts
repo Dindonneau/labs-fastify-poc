@@ -7,9 +7,6 @@ import { testDatabase } from "./database.ts"
 
 const mongoUrl = testDatabase()
 
-// fp() lifts app out of its own scope, so that a test can reach server.mongo
-// and empty the collection. This file has that database to itself, and every
-// test in it starts from an empty collection.
 // Every request goes through this, so swapping the header for a signed token
 // later is a change here and nowhere else.
 const asOwner = (ownerId: string) => ({ "x-owner-id": ownerId })
@@ -17,6 +14,9 @@ const asOwner = (ownerId: string) => ({ "x-owner-id": ownerId })
 const unicorn = asOwner("unicorn")
 const rainbow = asOwner("rainbow")
 
+// fp() lifts app out of its own scope, so that a test can reach server.mongo
+// and empty the collection. The suite shares one database, so a test starts
+// from an empty collection rather than from an empty database.
 async function build() {
   const server = Fastify()
   await server.register(fp(app), { serviceName: "test-service", mongoUrl })

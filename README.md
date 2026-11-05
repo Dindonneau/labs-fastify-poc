@@ -6,9 +6,11 @@ It is a proof of concept, built step by step on Fastify so that each piece is un
 
 ## Status
 
-Early. A server that starts from a configuration read from its environment, connects to MongoDB, leads that belong to whoever created them, a `GET /health` that reports whether the database answers, and the tests that cover all of it.
+Early. A server that starts from a configuration read from its environment, connects to MongoDB, leads that belong to whoever created them, exports that exist as job documents, a `GET /health` that reports whether the database answers, and the tests that cover all of it.
 
-There is no export yet, and `GET /leads` returns an owner's leads all at once: no limit, no pagination. **There is no authentication either**: a caller states who they are in a header and is believed. That is a deliberate boundary, not an oversight — see _Who is asking_ below.
+**Nothing runs those jobs yet.** An export is created, stored and read back, and it stays `pending`. The worker is the next step, and holding the two apart is deliberate: a job that survives a restart has to exist without the thing that runs it before that can be shown. See _Exporting_ below.
+
+`GET /leads` returns an owner's leads all at once: no limit, no pagination. And **there is no authentication**: a caller states who they are in a header and is believed. That too is a deliberate boundary rather than an oversight — see _Who is asking_.
 
 ## Stack
 
@@ -46,6 +48,21 @@ curl 127.0.0.1:8081/leads -H 'x-owner-id: rainbow'
 
 curl 127.0.0.1:8081/leads
 # {"statusCode":401,"error":"Unauthorized","message":"x-owner-id is required"}
+
+curl -X POST 127.0.0.1:8081/exports -H 'x-owner-id: unicorn' -i
+# HTTP/1.1 202 Accepted
+# location: /exports/6b01…
+# {"id":"6b01…","kind":"leadsExport","progress":{"processed":0,"total":1},
+#  "status":"pending","createdAt":"2026-11-05T10:00:00.000Z"}
+
+curl 127.0.0.1:8081/exports/6b01… -H 'x-owner-id: unicorn'
+# the same job, still pending: nothing runs it yet
+
+curl 127.0.0.1:8081/exports/6b01… -H 'x-owner-id: rainbow'
+# {"statusCode":404,"error":"Not Found","message":"No such export"}
+
+curl 127.0.0.1:8081/exports/nope -H 'x-owner-id: unicorn'
+# {"statusCode":400,"code":"FST_ERR_VALIDATION", …}
 ```
 
 `/health` needs no header. It is not an exception written anywhere: see _Who is asking_.
@@ -81,24 +98,30 @@ src/
     identity.ts            the only file that knows how a caller is identified
   repositories/
     leads.ts               reads and writes leads; where ObjectId stops
+    jobs.ts                reads and writes jobs, of whatever kind
   routes/
     health/index.ts        GET /health, and the database's state
     leads/index.ts         POST /leads and GET /leads
+    exports/index.ts       POST /exports and GET /exports/:id
   schemas/
     health.ts              the response schema and the type derived from it
     lead.ts                what a client may send, and what is answered
+    job.ts                 one shape per job status, and their union
+    error.ts               the three fields every error answer carries
   utils/
     validators.ts          what a valid host and a valid port are
-    mongo.ts               swaps Mongo's _id for the API's id, and guards the database
+    mongo.ts               turns a stored document into the API's, and guards the database
     string.ts, array.ts    small helpers
-    types.ts               Prettify, so a derived type reads as its result
+    types.ts               Prettify, Override and DistributiveOmit
     error.ts               prints an error's message rather than its stack
 test/
   config.test.ts           loadConfig, fed made-up environments
   health.test.ts           GET /health, played through inject()
   leads.test.ts            creating and listing, played through inject()
-  leads.repository.test.ts the repository alone, with no HTTP involved
-  mongo.test.ts            swapMongoId, with no database involved
+  leads.repository.test.ts the leads repository alone, with no HTTP involved
+  exports.test.ts          creating and reading a job, played through inject()
+  jobs.repository.test.ts  the jobs repository alone, with no HTTP involved
+  mongo.test.ts            mongoToApi, with no database involved
   database.ts              the test database, dropped when the file ends
   tsconfig.json            what `npm run typecheck`, and the editor, use to check the tests
 .env.example               the settings that exist, with their defaults
@@ -123,11 +146,17 @@ Two shapes instead of one, because what a client may send is not what the API an
 
 `repositories/leads.ts` is where the database stops. It takes `NewLead` objects and hands back `Lead` objects, and nothing above it ever holds an `ObjectId`. `routes/leads` only knows the `LeadsRepository` interface, so it never names a collection, an `_id` or a driver. It reaches the driver through `@fastify/mongodb`, which re-exports it, so nothing imports a package the `package.json` does not declare.
 
-The conversion itself lives in `utils/mongo.ts`, in one generic function. `swapMongoId` turns a stored document into the shape the API answers, whatever the entity, and four types go with it, all four constrained by `Doc` — the driver's own `Document`: `MongoModel<T>` for what is stored, `MongoDoc<T>` for what the driver hands back, `MongoToApiDoc<T>` for what leaves, and `ApiToMongoDoc<T>` for the way back, the API's own shape as the database holds it, with `id` replaced by `_id`. `MongoModel<LeadType>` is derived from the response schema, so the fields of a lead are declared once and in one place.
+The conversion itself lives in `utils/mongo.ts`, in one generic function. `mongoToApi` turns a stored document into the shape the API answers, whatever the entity: Mongo's `_id` becomes the API's `id`, and every `Date` and `ObjectId` underneath becomes a string. It is named for what it answers rather than for one of the things it does.
 
-That last one is what `list` asserts on its `find()`, which keeps the projected document derived from the response schema: `LeadType` holds no owner, so neither does the type of what the query is expected to return. Naming instead what to remove from the stored model says the same thing today and drifts apart from it the day a second private field appears. It is an assertion and nothing more — `find<T>()` tells the driver what to expect and verifies none of it — so the projection and the type have to be kept saying the same thing.
+Five types go with it, all constrained by `Doc` — the driver's own `Document`. `MongoModel<T>` for what is stored, `MongoDoc<T>` for what the driver hands back, `MongoToApiDoc<T>` for what leaves, `ApiToMongoDoc<T>` for the way back — the API's own shape as the database holds it, with `id` replaced by `_id` — and `MongoJSON<T>`, which the others are built on: what a stored value is once JSON has carried it. `MongoModel<LeadType>` is derived from the response schema, so the fields of a lead are declared once and in one place.
 
-All four pass through `Prettify`, in `utils/types.ts`, which only changes what an editor prints: the shape it comes out as instead of the `Omit` it was written as. For the compiler it is an identity, and nothing of it reaches runtime.
+`MongoJSON<T>` decides by the value's type and never by a field name. JSON holds neither a `Date` nor an `ObjectId`, so the conversion out is unconditional — which is what makes that direction free: a dated field added tomorrow is converted with nothing declared for it. It recurses, because a date two levels down is still a date, and it stops at anything carrying a `_bsontype`, the getter every BSON class has, so a `Binary`, a `Decimal128` or a `Long` comes out as itself — exactly what the code does with it. The one type assertion in `src/` is in that function: TypeScript cannot prove that an object rebuilt key by key matches a mapped type, because mapped types serve inference and not construction.
+
+The way in cannot be derived, since nothing in a `string` says which one is a date. It is named where the entity that has it is declared, through `Override<T, U>` in `utils/types.ts`: `repositories/jobs.ts` holds the one line it costs, `Override<MongoModel<JobType>, { createdAt: Date }>`. Forgetting it is a compile error rather than a silent loss.
+
+`ApiToMongoDoc<T>` is what `list` asserts on its `find()`, which keeps the projected document derived from the response schema: `LeadType` holds no owner, so neither does the type of what the query is expected to return. Naming instead what to remove from the stored model says the same thing today and drifts apart from it the day a second private field appears. It is an assertion and nothing more — `find<T>()` tells the driver what to expect and verifies none of it — so the projection and the type have to be kept saying the same thing.
+
+Every `Omit` in those types goes through `DistributiveOmit`, in `utils/types.ts`. `Omit<A | B, K>` keeps only the keys `A` and `B` share, so a field belonging to one branch of a union disappears without a word — and a job is a union of one shape per status. A conditional type whose checked side is a bare type parameter distributes over the union instead, which is the whole of what it adds. `Prettify` sits beside it and only changes what an editor prints: the shape a type comes out as rather than the chain it was written as. For the compiler both are identities, and nothing of either reaches runtime.
 
 `GET /leads` still reads an owner's leads in one go, with no limit and no cursor. The reason to defer it has run out — the owner filter it was waiting for is here — so it is now plainly a missing feature rather than a deliberate order of work, and it is in _What comes next_.
 
@@ -162,6 +191,26 @@ The decoration is stored and read with Fastify's `setDecorator` and `getDecorato
 
 The owner is stored but never answered back: `list` projects it away, because the caller already knows who they are. Every query filters on `ownerId`, so the repository creates that index when it is built — which is why building it is asynchronous. `_id` is the only index MongoDB creates by itself.
 
+### Exporting
+
+`POST /exports` creates a job document and answers `202` with it, and a `Location` header pointing at where its progress will be readable. `GET /exports/:id` reads it back. **Nothing runs it**: the job sits at `pending` in the database, and the worker is the next step. Holding them apart is the point — step three is resuming unfinished jobs after a kill, and a job has to exist without its runner before that can be demonstrated.
+
+`202` and not `201`, because the answer promises a job rather than a result. The `Location` header is the only other promise it makes.
+
+The route is `/exports` because that is what a client asks for; the collection is `jobs` because that is what the worker will drain. One kind of job exists, `leadsExport`, declared as a union of a single literal — which is not a mistake, it is what makes a second kind a compiler error everywhere it is not handled yet. The kind is part of every query, so a job of another kind cannot be reached through this route.
+
+A job is **one of four shapes told apart by its status**, not one shape with a status in it. They carry the same fields today and they will not: a running job has a `startedAt`, a finished one a `finishedAt`, a failed one says why. Declared this way, each of those belongs to the status that has it, the compiler refuses to read it from a status that does not, and the response schema refuses to answer a job that is missing one. It is also what lets `create` say it returns a **pending** job rather than a job of any status, and `POST /exports` declare that narrower branch as its response.
+
+`GET /exports/:id` answers **404 and not 403** for a job that belongs to someone else. A `403` would confirm that it exists. The route cannot answer one even by accident: `findById` hands back the same `null` for a job that is absent, one that is another owner's, and one of another kind.
+
+The `:id` is declared as 24 hexadecimal characters, so a malformed one is a `400` before the handler runs. Without that, `new ObjectId()` throws a `BSONError` and the caller gets a `500` for what is their own mistake. The repository checks it again with `ObjectId.isValid`, because the worker will call it with no schema in front of it.
+
+`POST /exports` is the one route with no body schema, although everything else here declares one. A declared `Type.Object({})` answers `400 "body must be object"` to a POST sent **without** a body, which is how this route is called. The consequence is accepted and worth stating: a body sent anyway is not stripped, it is simply never read.
+
+The `total` is counted when the job is created, through `leads.count(ownerId)` — a `countDocuments` that goes through the owner index and loads nothing, where `list(ownerId).length` would read every lead to reach the same number. It is a snapshot: a lead created afterwards is not part of this export, and a test says so, because that is a decision rather than an accident.
+
+Both repository factories are asynchronous, because building one may have to touch the database: that is how the leads repository creates its index. The jobs one has nothing to prepare yet — reading a job by its id rides the `_id` index MongoDB creates by itself, and the worker's claim query is what will earn `{ status, createdAt }`, in the worker's own step. The signature is uniform rather than exact, so that adding that index later changes the repository and not the route that builds it.
+
 ### Configuration
 
 `config.ts` reads the settings once, at startup. An environment only holds strings, or nothing at all when a variable is absent, so this is where each value gets its real type (`PORT` becomes a number) and where a bad one is refused. A start with `PORT=abc` stops with exit code 1 and a message that lists every problem at once, rather than a stack trace. A value that is well formed but cannot be used, such as an address that is not on this machine, still fails later, at `listen`.
@@ -195,14 +244,13 @@ Nothing runs by itself: there is no hook and no CI, so the formatter, the typech
 
 In order, each step on its own:
 
-1. The export as a job document, with a status and a progress.
-2. A worker that runs it, started and stopped with the server.
-3. Resuming unfinished jobs at startup, checked by killing the process rather than stopping it politely.
-4. Progress the client can read.
-5. Error handling and a clean shutdown.
-6. A limit and a cursor on `GET /leads`.
+1. A worker that runs a pending job, started and stopped with the server.
+2. Resuming unfinished jobs at startup, checked by killing the process rather than stopping it politely.
+3. Progress the client can read.
+4. Error handling and a clean shutdown.
+5. A limit and a cursor on `GET /leads`.
 
-Signed tokens in place of the `x-owner-id` header would be a seventh, and a small one: it is one hook and one test helper. It is left out on purpose — the two things this project exists to show are the resilient job and the per-owner scoping, and authentication is neither.
+Signed tokens in place of the `x-owner-id` header would be a sixth, and a small one: it is one hook and one test helper. It is left out on purpose — the two things this project exists to show are the resilient job and the per-owner scoping, and authentication is neither.
 
 ## Related
 
