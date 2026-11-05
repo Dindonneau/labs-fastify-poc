@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify"
 import mongo from "./plugins/mongo.ts"
+import exportJobs from "./routes/exports/index.ts"
 import health from "./routes/health/index.ts"
 import leads from "./routes/leads/index.ts"
 
@@ -17,6 +18,8 @@ const app: FastifyPluginAsync<AppOptions> = async (fastify, options) => {
   })
 
   await fastify.register(leads, { prefix: "/leads" })
+
+  await fastify.register(exportJobs, { prefix: "/exports" })
 }
 
 export default app
