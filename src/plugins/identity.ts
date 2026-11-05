@@ -1,7 +1,17 @@
 import fp from "fastify-plugin"
 import type { FastifyRequest } from "fastify"
+import type { ApiErrorType } from "../schemas/error.ts"
 
 export const OWNER_ID_KEY = "ownerId"
+
+// The shape a route declares in its response schema, so that what this hook
+// answers and what a 404 answers stay the same three fields. A hook has no
+// response schema of its own to check it, which is why the type is named here.
+const unauthorized: ApiErrorType = {
+  statusCode: 401,
+  error: "Unauthorized",
+  message: "x-owner-id is required"
+}
 
 // The only file that knows how a caller is identified. Everything downstream
 // goes through getOwner() and never reads a header, so replacing this with real
@@ -26,11 +36,7 @@ const identity = fp(
       const ownerId = request.headers["x-owner-id"]
 
       if (typeof ownerId !== "string" || ownerId.trim() === "") {
-        return reply.code(401).send({
-          statusCode: 401,
-          error: "Unauthorized",
-          message: "x-owner-id is required"
-        })
+        return reply.code(401).send(unauthorized)
       }
 
       request.setDecorator(OWNER_ID_KEY, ownerId.trim())

@@ -6,8 +6,8 @@ import { testDatabase } from "./database.ts"
 
 // No Fastify here: the repository does not know that an HTTP server exists.
 // The driver comes through @fastify/mongodb, which re-exports it, so this test
-// imports nothing the package.json does not declare. Its own database, as
-// every test file has: they run in parallel and each one empties a collection.
+// imports nothing the package.json does not declare. The database is the one
+// the whole suite shares, emptied before each test and dropped at the end.
 const url = testDatabase()
 const client = new mongodb.MongoClient(url)
 const db = client.db()
