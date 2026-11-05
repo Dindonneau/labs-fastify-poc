@@ -1,7 +1,7 @@
 import type { mongodb } from "@fastify/mongodb"
 import type { LeadType, NewLeadType } from "../schemas/lead.ts"
 import {
-  swapMongoId,
+  mongoToApi,
   type ApiToMongoDoc,
   type MongoModel
 } from "../utils/mongo.ts"
@@ -14,6 +14,7 @@ type LeadClientDoc = ApiToMongoDoc<LeadType>
 export interface LeadsRepository {
   create(ownerId: string, lead: NewLeadType): Promise<LeadType>
   list(ownerId: string): Promise<LeadType[]>
+  count(ownerId: string): Promise<number>
 }
 
 // The driver is reached through @fastify/mongodb, which re-exports it: it is
@@ -35,7 +36,7 @@ export async function mongoLeadsRepository(
       // copy and never the request body. The owner is added here, not by the
       // client: the body schema has no place for it.
       const { insertedId } = await collection.insertOne({ ...lead, ownerId })
-      return swapMongoId({ ...lead, _id: insertedId })
+      return mongoToApi({ ...lead, _id: insertedId })
     },
 
     async list(ownerId) {
@@ -44,7 +45,14 @@ export async function mongoLeadsRepository(
       const documents = await collection
         .find<LeadClientDoc>({ ownerId }, { projection: { ownerId: 0 } })
         .toArray()
-      return documents.map(swapMongoId)
+      return documents.map(mongoToApi)
+    },
+
+    // What an export's progress is counted out of. It goes through the ownerId
+    // index and loads no document, where list(ownerId).length would read every
+    // lead to arrive at the same number.
+    async count(ownerId) {
+      return collection.countDocuments({ ownerId })
     }
   }
 }
