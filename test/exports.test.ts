@@ -76,7 +76,7 @@ test("the total counts the leads the owner has, and only those", async t => {
 })
 
 // The total is a snapshot, and saying so in a test is what makes it a decision
-// rather than an accident the worker will have to live with.
+// rather than an accident the worker has to live with.
 test("a lead created after the job is not in its total", async t => {
   const server = await build()
   t.after(() => server.close())
@@ -186,6 +186,49 @@ for (const [method, url] of [
     assert.equal(response.statusCode, 401)
   })
 }
+
+// Nothing in this file runs jobs, which is what makes these two deterministic:
+// the job cannot finish between the POST and the GET.
+test("a job that can still change says when to come back", async t => {
+  const server = await build()
+  t.after(() => server.close())
+
+  const created = await createExport(server, unicorn)
+
+  const response = await server.inject({
+    method: "GET",
+    url: `/exports/${created.json().id}`,
+    headers: unicorn
+  })
+
+  assert.equal(Number(response.headers["retry-after"]), 1)
+})
+
+// A Retry-After here would send a client back for an answer it already holds.
+test("a job that will not change again sends no retry-after", async t => {
+  const server = await build()
+  t.after(() => server.close())
+
+  const { insertedId } = await server.mongo.db!.collection("jobs").insertOne({
+    ownerId: "unicorn",
+    kind: "leadsExport",
+    status: "done",
+    progress: { processed: 1, total: 1 },
+    createdAt: new Date(),
+    startedAt: new Date(),
+    finishedAt: new Date()
+  })
+
+  const response = await server.inject({
+    method: "GET",
+    url: `/exports/${insertedId.toHexString()}`,
+    headers: unicorn
+  })
+
+  assert.equal(response.statusCode, 200)
+  assert.equal(response.json().status, "done")
+  assert.equal(response.headers["retry-after"], undefined)
+})
 
 test("the job document keeps the owner, and the answer does not", async t => {
   const server = await build()

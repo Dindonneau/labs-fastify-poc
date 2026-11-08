@@ -12,11 +12,12 @@ import {
   type PendingJobType
 } from "../../schemas/job.ts"
 import { requireDb } from "../../utils/mongo.ts"
+import { retryAfterSeconds } from "../../utils/retry.ts"
 
 // The route is /exports because that is what a client asks for; the collection
-// is jobs because that is what the worker will drain. One kind of job is
-// created here, and reaching a job of another kind through this route is not
-// possible: the kind is part of every query.
+// is jobs because that is what the worker drains. One kind of job is created
+// here, and reaching a job of another kind through this route is not possible:
+// the kind is part of every query.
 const KIND = "leadsExport"
 
 const exportJobs: FastifyPluginAsync = async fastify => {
@@ -29,7 +30,7 @@ const exportJobs: FastifyPluginAsync = async fastify => {
   const leads = await mongoLeadsRepository(db)
 
   // 202 and not 201: the job exists, and nothing has run it. Location is where
-  // its progress will be readable, which is the only promise this answer makes.
+  // its progress is readable, which is the only promise this answer makes.
   //
   // No body schema, although the project declares one everywhere else, because
   // there is no body: a declared `Type.Object({})` answers 400 "body must be
@@ -76,6 +77,17 @@ const exportJobs: FastifyPluginAsync = async fastify => {
           message: "No such export"
         })
       }
+
+      // What turns polling from the client's guess into the server's answer:
+      // it knows the rate and how much is left, the client knows neither.
+      // Null on a job that will not change again, and the header is then left
+      // out rather than sent at zero — which would mean "come back now".
+      //
+      // Headers are not declared in the response schema: Fastify validates
+      // and serialises the body, and a header it does not know about goes out
+      // untouched.
+      const retryAfter = retryAfterSeconds(job, new Date())
+      if (retryAfter !== null) reply.header("retry-after", retryAfter)
 
       return reply.code(200).send(job)
     }
