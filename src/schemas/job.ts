@@ -1,9 +1,9 @@
 import Type from "typebox"
 
-// One collection holds every kind of job, so the worker of the next step can
-// claim whatever is pending without knowing what it will run. One kind exists
-// today, and a union of one is not a mistake: it is what makes the second kind
-// a compiler error everywhere it is not handled yet.
+// One collection holds every kind of job, so a worker can claim whatever is
+// pending of the kind it knows how to run. One kind exists today, and a union
+// of one is not a mistake: it is what makes the second kind a compiler error
+// everywhere it is not handled yet.
 //
 // The field is `kind` and not `type` because the schema constant would then be
 // `JobType`, which is the name the job document's own derived type needs.
@@ -22,7 +22,7 @@ export const Progress = Type.Object({
 export type ProgressType = Type.Static<typeof Progress>
 
 // What every job carries, whatever its status. createdAt is in the document
-// from the start because it is what the worker will order by when it claims
+// from the start because it is what the worker orders by when it claims
 // the oldest pending job.
 const jobFields = {
   id: Type.String(),
@@ -46,19 +46,29 @@ export const PendingJob = Type.Object({
   status: Type.Literal("pending")
 })
 
+// startedAt arrives with the claim, in the same atomic update that moves the
+// status, so a running job cannot exist without one.
 export const RunningJob = Type.Object({
   ...jobFields,
-  status: Type.Literal("running")
+  status: Type.Literal("running"),
+  startedAt: Type.String({ format: "date-time" })
 })
 
 export const DoneJob = Type.Object({
   ...jobFields,
-  status: Type.Literal("done")
+  status: Type.Literal("done"),
+  startedAt: Type.String({ format: "date-time" }),
+  finishedAt: Type.String({ format: "date-time" })
 })
 
+// A job can only fail after it was claimed, so it has both times too, and the
+// reason. The message is the worker's own; nothing a client sent reaches it.
 export const FailedJob = Type.Object({
   ...jobFields,
-  status: Type.Literal("failed")
+  status: Type.Literal("failed"),
+  startedAt: Type.String({ format: "date-time" }),
+  finishedAt: Type.String({ format: "date-time" }),
+  error: Type.String()
 })
 
 export const Job = Type.Union([PendingJob, RunningJob, DoneJob, FailedJob])
