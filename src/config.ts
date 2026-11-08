@@ -11,6 +11,7 @@ export interface IConfig {
   port: number
   serviceName: string
   mongoUrl: string
+  exportDir: string
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): IConfig {
@@ -39,11 +40,24 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): IConfig {
     )
   }
 
+  // Where the worker writes the files it produces. A relative path is resolved
+  // against the working directory, which is what makes the default readable by
+  // whoever just ran the server; a deployment points it at a mounted volume.
+  // The directory is created by the worker rather than required to exist.
+  const exportDir = env.EXPORT_DIR ?? "exports"
+  if (isEmptyString(exportDir)) problems.push("EXPORT_DIR must not be empty")
+
   // Report every problem at once
   if (problems.length > 0) {
     const list = listArrayContent(problems)
     throw new Error(`Invalid configuration:\n${list}`)
   }
 
-  return { host, port: +port, serviceName, mongoUrl: mongoUrl as string }
+  return {
+    host,
+    port: +port,
+    serviceName,
+    mongoUrl: mongoUrl as string,
+    exportDir
+  }
 }

@@ -13,7 +13,8 @@ test("an empty environment gives the defaults", () => {
     host: "127.0.0.1",
     port: 8081,
     serviceName: "fastify-poc",
-    mongoUrl: base.MONGO_URL
+    mongoUrl: base.MONGO_URL,
+    exportDir: "exports"
   })
 })
 
@@ -22,14 +23,16 @@ test("the values are read, and PORT becomes a number", () => {
     ...base,
     HOST: "localhost",
     PORT: "3000",
-    SERVICE_NAME: "unicorn"
+    SERVICE_NAME: "unicorn",
+    EXPORT_DIR: "/var/exports/unicorn"
   })
 
   assert.deepEqual(config, {
     host: "localhost",
     port: 3000,
     serviceName: "unicorn",
-    mongoUrl: base.MONGO_URL
+    mongoUrl: base.MONGO_URL,
+    exportDir: "/var/exports/unicorn"
   })
   assert.equal(typeof config.port, "number")
 })
@@ -107,6 +110,13 @@ test("a blank SERVICE_NAME is refused", () => {
   )
 })
 
+test("a blank EXPORT_DIR is refused", () => {
+  assert.throws(
+    () => loadConfig({ ...base, EXPORT_DIR: "  " }),
+    /EXPORT_DIR must not be empty/
+  )
+})
+
 test("every problem is reported at once, not only the first", () => {
   assert.throws(
     () =>
@@ -114,7 +124,8 @@ test("every problem is reported at once, not only the first", () => {
         HOST: "",
         PORT: "abc",
         SERVICE_NAME: " ",
-        MONGO_URL: "nope"
+        MONGO_URL: "nope",
+        EXPORT_DIR: ""
       }),
     error =>
       error instanceof Error &&
@@ -122,7 +133,8 @@ test("every problem is reported at once, not only the first", () => {
       error.message.includes("HOST is not valid") &&
       error.message.includes("PORT must be an integer") &&
       error.message.includes("SERVICE_NAME must not be empty") &&
-      error.message.includes("MONGO_URL must be a mongodb")
+      error.message.includes("MONGO_URL must be a mongodb") &&
+      error.message.includes("EXPORT_DIR must not be empty")
   )
 })
 
