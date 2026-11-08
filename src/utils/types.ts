@@ -21,8 +21,19 @@ export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
   ? Omit<T, K>
   : never
 
-// Replaces the fields U names and leaves every other one alone. It exists for
-// the one conversion that cannot be derived: a document leaving MongoDB has
-// its dates converted by their type, with no name to declare anywhere, but
-// nothing in a `string` says which one is to become a Date on the way in.
-export type Override<T, U> = Prettify<DistributiveOmit<T, keyof U> & U>
+// Replaces the fields of T that U also names, and **adds nothing**. That is
+// the whole difference with an intersection, and a union is what makes it
+// matter: a job is one shape per status, only some of which have a startedAt,
+// and `Omit<T, keyof U> & U` would hand a startedAt to every one of them.
+//
+// Being a mapped type over keyof T, it distributes over a union and carries
+// the optional and readonly modifiers by itself, so it needs neither
+// DistributiveOmit nor Prettify.
+//
+// It exists for the one conversion that cannot be derived: a document leaving
+// MongoDB has its dates converted by their type, with no name to declare
+// anywhere, but nothing in a `string` says which one is to become a Date on
+// the way in.
+export type Override<T, U> = {
+  [K in keyof T]: K extends keyof U ? U[K] : T[K]
+}
