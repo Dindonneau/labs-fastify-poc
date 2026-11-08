@@ -90,3 +90,28 @@ test("ownerId is stored but never handed back", async () => {
   assert.equal(stored?.ownerId, unicorn)
   assert.equal("ownerId" in lead, false)
 })
+
+// What the worker walks instead of list(). The same leads, in the same shape,
+// one at a time — the difference is in what is held in memory, which no
+// assertion can see, so these say the contract is the same.
+test("stream hands back the owner's leads, as list does", async () => {
+  await repository.create(unicorn, { email: "unicorn@rainbow.com" })
+  await repository.create(unicorn, { email: "unicorn2@rainbow.com" })
+  await repository.create(rainbow, { email: "rainbow@unicorn.com" })
+
+  const streamed = []
+  for await (const lead of repository.stream(unicorn)) streamed.push(lead)
+
+  assert.deepEqual(streamed, await repository.list(unicorn))
+  assert.deepEqual(streamed.map(lead => lead.email).sort(), [
+    "unicorn2@rainbow.com",
+    "unicorn@rainbow.com"
+  ])
+})
+
+test("stream over an owner with no leads yields nothing", async () => {
+  const streamed = []
+  for await (const lead of repository.stream(unicorn)) streamed.push(lead)
+
+  assert.deepEqual(streamed, [])
+})

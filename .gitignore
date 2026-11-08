@@ -1,6 +1,13 @@
 node_modules/
 dist/
 
+# What the worker writes, under the default EXPORT_DIR. Anchored with a
+# leading slash: a trailing-slash pattern with no other slash in it matches a
+# directory of that name at any depth, and `exports/` alone also shadowed
+# src/routes/exports — where a new route file would have gone unstaged in
+# silence. Only the one at the root of the repository is data.
+/exports/
+
 # VSCode
 .vscode/
 

@@ -15,6 +15,11 @@ export interface LeadsRepository {
   create(ownerId: string, lead: NewLeadType): Promise<LeadType>
   list(ownerId: string): Promise<LeadType[]>
   count(ownerId: string): Promise<number>
+
+  // What list() cannot be for the worker. Declared as AsyncIterable rather
+  // than as the generator the implementation happens to be: a caller only ever
+  // walks it, and an array is as valid a way of answering this as a cursor.
+  stream(ownerId: string): AsyncIterable<LeadType>
 }
 
 // The driver is reached through @fastify/mongodb, which re-exports it: it is
@@ -53,6 +58,23 @@ export async function mongoLeadsRepository(
     // lead to arrive at the same number.
     async count(ownerId) {
       return collection.countDocuments({ ownerId })
+    },
+
+    // The same query as list(), without the toArray() that makes it unusable
+    // past a certain size: the cursor keeps one batch in memory whether the
+    // owner has ten leads or five million, and the caller gets them one at a
+    // time. list() stays for the route, which answers a JSON array and so has
+    // to hold the whole of it anyway.
+    //
+    // mongoToApi is applied here and not by the caller, so the driver's types
+    // stop at this line in this direction too.
+    async *stream(ownerId) {
+      const cursor = collection.find<LeadClientDoc>(
+        { ownerId },
+        { projection: { ownerId: 0 } }
+      )
+
+      for await (const document of cursor) yield mongoToApi(document)
     }
   }
 }
